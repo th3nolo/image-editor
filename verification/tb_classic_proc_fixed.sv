@@ -80,7 +80,7 @@ module tb_classic_proc_fixed;
         memory[16'h0101] = 8'd7;
         memory[16'h0102] = 8'h00;
         memory[16'h0103] = 8'd2;
-        memory[16'h0104] = 8'h0f;
+        memory[16'h0104] = 8'h03;
         memory[16'h0105] = 8'ha5;
 
         repeat (2) @(posedge clk);
