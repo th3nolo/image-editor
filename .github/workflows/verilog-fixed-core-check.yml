@@ -1,0 +1,78 @@
+name: Corrected classic processor RTL check
+
+on:
+  push:
+    branches:
+      - verification/verilog-options-a-b-20260904
+    paths:
+      - verification/classic_proc_fixed.sv
+      - verification/tb_classic_proc_fixed.sv
+      - .github/workflows/verilog-fixed-core-check.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install HDL tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog verilator yosys
+          mkdir -p verification/results-fixed
+          {
+            iverilog -V 2>&1 | head -n 3
+            verilator --version
+            yosys -V
+          } | tee verification/results-fixed/tool-versions.log
+
+      - name: Compile and simulate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd verification
+          iverilog -g2012 -Wall -s tb_classic_proc_fixed \
+            -o results-fixed/tb_classic_proc_fixed.vvp \
+            classic_proc_fixed.sv tb_classic_proc_fixed.sv \
+            2>&1 | tee results-fixed/iverilog-compile.log
+          vvp results-fixed/tb_classic_proc_fixed.vvp \
+            2>&1 | tee results-fixed/simulation.log
+          grep -q '^PASS ' results-fixed/simulation.log
+
+      - name: Strict lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd verification
+          verilator --lint-only --timing -Wall \
+            --top-module classic_proc_fixed \
+            classic_proc_fixed.sv \
+            2>&1 | tee results-fixed/verilator-lint.log
+
+      - name: Synthesize
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd verification
+          yosys -p 'read_verilog -sv classic_proc_fixed.sv; hierarchy -check -top classic_proc_fixed; proc; check; synth -top classic_proc_fixed; stat' \
+            2>&1 | tee results-fixed/yosys-synthesis.log
+          grep -q 'Found and reported 0 problems' results-fixed/yosys-synthesis.log
+
+      - name: Record exact sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd verification
+          sha256sum classic_proc_fixed.sv tb_classic_proc_fixed.sv \
+            | tee results-fixed/source-sha256.txt
+          cp classic_proc_fixed.sv tb_classic_proc_fixed.sv results-fixed/
+
+      - name: Upload verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: corrected-classic-processor-rtl-verification
+          path: verification/results-fixed
